@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: external
+    database: CT_JAY_RATHI_DB
+    schema: EXTERNAL
+    freshness:
+      warn_after:
+        count: 24
+        period: hour
+    tables:    
+      - name: EXT_CAMPAIGN_DATA
+      - name: EXT_CUSTOMER_DATA
+      - name: EXT_EMPLOYEE_DATA
+      - name: EXT_ORDER_DATA
+      - name: EXT_PRODUCT_DATA
+      - name: EXT_STORE_DATA
+      - name: EXT_SUPPLIER_DATA
+
+
+
