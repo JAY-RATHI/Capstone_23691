@@ -1,36 +1,36 @@
 {{ config(materialized="table") }}
 
 -- Step 1: pull the bronze rows we need, nothing more
-WITH source_data AS (
+with source_data as (
 
-    SELECT
+    select
         source_file,
         row_number,
         raw_data,
         loaded_at,
         batch_id
-    FROM {{ ref("br_campaign") }}
+    from {{ ref("br_campaign") }}
 
 ),
 
 -- Step 2: unnest the campaigns_data array so each campaign is its own row
-flattened AS (
+flattened as (
 
-    SELECT
+    select
         s.source_file,
         s.row_number,
         s.loaded_at,
         s.batch_id,
-        campaign.value AS campaign_data
-    FROM source_data s,
-    LATERAL FLATTEN(input => s.raw_data:campaigns_data) AS campaign
+        campaign.value as campaign_data
+    from source_data s,
+    lateral flatten(input => s.raw_data:campaigns_data) as campaign
 
 ),
 
 -- Step 3: extract + clean + standardize every output column
-cleaned AS (
+cleaned as (
 
-    SELECT
+    select
 
         -- lineage columns, carried through as-is
         source_file,
@@ -39,98 +39,93 @@ cleaned AS (
         batch_id,
 
         -- natural key
-        NULLIF(TRIM(campaign_data:campaign_id::VARCHAR), '') AS campaign_id,
+        nullif(trim(campaign_data:campaign_id::varchar), '') as campaign_id,
 
         -- trim, strip unwanted characters, title-case
-        INITCAP(
-            REGEXP_REPLACE(
-                TRIM(campaign_data:campaign_name::VARCHAR),
-                '[^A-Za-z0-9 ''&-]',
-                ''
-            )
-        ) AS campaign_name,
+        initcap(
+            regexp_replace(trim(campaign_data:campaign_name::varchar), '[^A-Za-z0-9 ''&-]', '')
+        ) as campaign_name,
 
-        -- preserves the full demographic description, e.g.
-        -- "families 18-25" -> "Families 18-25", "suburban" -> "Suburban"
-        INITCAP(
-            REGEXP_REPLACE(
-                TRIM(campaign_data:target_audience::VARCHAR),
-                '[^A-Za-z0-9 ''&/-]',
-                ''
-            )
-        ) AS target_audience_segmentation,
+        -- this is the actual campaign_type field from the Bronze JSON;
+        -- it is NOT derived from target_audience_segmentation
+        initcap(
+            regexp_replace(trim(campaign_data:campaign_type::varchar), '[^A-Za-z0-9 ''&/-]', '')
+        ) as campaign_type,
 
-        TRY_TO_DATE(NULLIF(TRIM(campaign_data:start_date::VARCHAR), '')) AS start_date,
-        TRY_TO_DATE(NULLIF(TRIM(campaign_data:end_date::VARCHAR), '')) AS end_date,
+        -- preserves the complete demographic description as-is
+        initcap(
+            regexp_replace(trim(campaign_data:target_audience::varchar), '[^A-Za-z0-9 ''&/-]', '')
+        ) as target_audience_segmentation,
 
-        -- currency string parsing, e.g. "$24,005.75" -> 24005.75
-        TRY_TO_DECIMAL(
-            NULLIF(REGEXP_REPLACE(TRIM(campaign_data:budget::VARCHAR), '[$,]', ''), ''),
+        try_to_date(nullif(trim(campaign_data:start_date::varchar), '')) as start_date,
+        try_to_date(nullif(trim(campaign_data:end_date::varchar), '')) as end_date,
+
+        -- currency string parsing
+        try_to_decimal(
+            nullif(regexp_replace(trim(campaign_data:budget::varchar), '[$,]', ''), ''),
             18, 2
-        ) AS budget,
+        ) as budget,
 
-        TRY_TO_DECIMAL(
-            NULLIF(REGEXP_REPLACE(TRIM(campaign_data:total_cost::VARCHAR), '[$,]', ''), ''),
+        try_to_decimal(
+            nullif(regexp_replace(trim(campaign_data:total_cost::varchar), '[$,]', ''), ''),
             18, 2
-        ) AS total_cost,
+        ) as total_cost,
 
-        -- normalized to numeric only; NOT used to calculate final ROI here
-        TRY_TO_DECIMAL(
-            NULLIF(REGEXP_REPLACE(TRIM(campaign_data:total_revenue::VARCHAR), '[$,]', ''), ''),
+        try_to_decimal(
+            nullif(regexp_replace(trim(campaign_data:total_revenue::varchar), '[$,]', ''), ''),
             18, 2
-        ) AS total_revenue,
+        ) as total_revenue,
 
-        -- cast as-is from the source; ROI is NOT calculated in this model
-        TRY_TO_DECIMAL(
-            NULLIF(TRIM(campaign_data:roi_calculation::VARCHAR), ''),
+        -- cast the source value as-is; ROI is not calculated in this model
+        try_to_decimal(
+            nullif(trim(campaign_data:roi_calculation::varchar), ''),
             18, 4
-        ) AS roi_calculation,
+        ) as roi_calculation,
 
-        TRY_TO_TIMESTAMP_NTZ(
-            NULLIF(TRIM(campaign_data:last_modified_date::VARCHAR), '')
-        ) AS last_modified_date
+        try_to_timestamp_ntz(
+            nullif(trim(campaign_data:last_modified_date::varchar), '')
+        ) as last_modified_date
 
-    FROM flattened
+    from flattened
 
 ),
 
 -- Step 4: derive campaign-specific attributes on top of the cleaned columns
-derived AS (
+derived as (
 
-    SELECT
+    select
         c.*,
 
         -- days elapsed between start_date and end_date; null if either is missing
-        CASE
-            WHEN c.start_date IS NOT NULL AND c.end_date IS NOT NULL
-                THEN DATEDIFF(day, c.start_date, c.end_date)
-            ELSE NULL
-        END AS campaign_duration_days
+        case
+            when c.start_date is not null and c.end_date is not null
+                then datediff(day, c.start_date, c.end_date)
+            else null
+        end as campaign_duration_days
 
-    FROM cleaned c
+    from cleaned c
 
 ),
 
 -- Step 5: collapse to one row per campaign_id, keeping the freshest version
 -- (rows with no campaign_id are kept individually rather than collapsed together)
-deduplicated AS (
+deduplicated as (
 
-    SELECT *
-    FROM derived
-    QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY
-            CASE
-                WHEN campaign_id IS NOT NULL THEN campaign_id
-                ELSE CONCAT('_NULL_', source_file, '_', row_number)
-            END
-        ORDER BY
-            last_modified_date DESC NULLS LAST,
-            loaded_at DESC,
-            source_file DESC,
-            row_number DESC
+    select *
+    from derived
+    qualify row_number() over (
+        partition by
+            case
+                when campaign_id is not null then campaign_id
+                else concat('_NULL_', source_file, '_', row_number)
+            end
+        order by
+            last_modified_date desc nulls last,
+            loaded_at desc,
+            source_file desc,
+            row_number desc
     ) = 1
 
 )
 
-SELECT *
-FROM deduplicated
+select * from deduplicated

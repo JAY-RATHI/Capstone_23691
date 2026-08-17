@@ -7,6 +7,8 @@ with campaigns as (
 
     select
         campaign_id,
+        campaign_name,
+        campaign_type,
         target_audience_segmentation,
         budget,
         campaign_duration_days,
@@ -29,6 +31,12 @@ final as (
         -- natural key
         campaign_id,
 
+        campaign_name,
+
+        -- actual campaign type supplied by the source JSON;
+        -- this is NOT the target audience
+        campaign_type,
+
         -- target audience
         target_audience_segmentation as target_audience_segment,
 
@@ -38,9 +46,7 @@ final as (
         -- days between start_date and end_date
         campaign_duration_days as duration,
 
-        -- normalized source ROI carried through from Silver; final ROI
-        -- based on attributed sales is calculated and validated in the
-        -- Gold Marketing Performance fact, not here
+        -- normalized source ROI from Silver
         roi_calculation as roi,
 
         -- campaign dates
