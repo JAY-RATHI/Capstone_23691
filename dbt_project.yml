@@ -40,18 +40,22 @@ models:
     # Applies to all files under models/example/
     staging:
       bronze:
-        +schema: bronze
+        +schema: "{{ env_var('DBT_BRONZE') }}"
         +materialized: incremental
         +incremental_strategy: merge
     silver:
-      +schema: silver 
+      +schema: "{{ env_var('DBT_SILVER') }}" 
       +materialized: table
     gold: 
-      +schema: gold 
+      +schema: "{{ env_var('DBT_GOLD') }}" 
+      +materialized: table
     reporting:
-      +schema: reporting
+      +schema: "{{ env_var('DBT_REPORTING') }}"
+      +materialized: view
+    elementary:
+      +schema: elementary
 snapshots:
   capstone_project:
-    +schema: snapshots
+    +schema: "{{ env_var('DBT_SNAPSHOT') }}"
       
     

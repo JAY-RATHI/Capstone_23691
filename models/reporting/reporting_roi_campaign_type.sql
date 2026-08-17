@@ -1,10 +1,9 @@
 {{ config(
-    schema='reporting',
-    materialized='view'
+    materialized = 'view'
 ) }}
 
 SELECT
-    dmc.target_audience_segment AS campaign_type,
+    dmc.campaign_type,
 
     COUNT(DISTINCT fmp.campaign_key) AS campaign_count,
 
@@ -30,4 +29,4 @@ LEFT JOIN {{ ref('dim_marketing_campaign') }} AS dmc
     ON dmc.campaign_key = fmp.campaign_key
 
 GROUP BY
-    dmc.target_audience_segment
+    dmc.campaign_type
