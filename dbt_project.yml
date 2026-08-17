@@ -52,8 +52,8 @@ models:
     reporting:
       +schema: "{{ env_var('DBT_REPORTING') }}"
       +materialized: view
-    elementary:
-      +schema: elementary
+  elementary:
+    +schema: elementary
 snapshots:
   capstone_project:
     +schema: "{{ env_var('DBT_SNAPSHOT') }}"
