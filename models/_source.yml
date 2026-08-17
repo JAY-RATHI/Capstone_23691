@@ -4,18 +4,26 @@ sources:
   - name: external
     database: CT_JAY_RATHI_DB
     schema: EXTERNAL
-    freshness:
-      warn_after:
-        count: 24
-        period: hour
-    tables:    
-      - name: EXT_CAMPAIGN_DATA
-      - name: EXT_CUSTOMER_DATA
-      - name: EXT_EMPLOYEE_DATA
-      - name: EXT_ORDER_DATA
-      - name: EXT_PRODUCT_DATA
-      - name: EXT_STORE_DATA
-      - name: EXT_SUPPLIER_DATA
 
+    config:
+      loaded_at_field: FILE_LAST_MODIFIED
+      freshness:
+        warn_after:
+          count: 12
+          period: day
 
-
+    tables:
+      - name: campaign
+        identifier: ext_campaign
+      - name: customer
+        identifier: ext_customer
+      - name: employee
+        identifier: ext_employee
+      - name: orders
+        identifier: ext_orders
+      - name: product
+        identifier: ext_product
+      - name: store
+        identifier: ext_store
+      - name: supplier
+        identifier: ext_supplier
