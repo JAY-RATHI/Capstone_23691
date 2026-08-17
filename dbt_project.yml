@@ -48,7 +48,8 @@ models:
       +materialized: table
     gold: 
       +schema: gold 
-      
+    reporting:
+      +schema: reporting
 snapshots:
   capstone_project:
     +schema: snapshots
